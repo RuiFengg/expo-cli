@@ -25,7 +25,6 @@ import {
 import IOSUploader, { IosPlatformOptions, LANGUAGES } from './upload/IOSUploader';
 import AndroidUploader, { AndroidPlatformOptions } from './upload/AndroidUploader';
 import log from '../log';
-import { Platform } from './upload/submission-service/SubmissionService';
 
 const SOURCE_OPTIONS = ['id', 'latest', 'path', 'url'];
 
@@ -218,7 +217,7 @@ function getAndroidSubmissionOptions(ctx: SubmissionContext): AndroidSubmissionO
   const serviceAccountSource = resolveServiceAccountSource(ctx);
 
   const errored = [androidPackage, track, archiveSource, archiveType, serviceAccountSource].filter(
-    r => r.ok
+    r => !r.ok
   );
   if (errored.length > 0) {
     const message = errored.map(err => err.reason?.message).join('\n');

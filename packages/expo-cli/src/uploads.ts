@@ -1,22 +1,31 @@
-import S3 from '@expo/s3';
-import { ApiV2, UserManager } from '@expo/xdl';
+import fs from 'fs';
+import { Readable } from 'stream';
+
+import { ApiV2, FormData, UserManager } from '@expo/xdl';
+import axios from 'axios';
+import concat from 'concat-stream';
 import md5File from 'md5-file/promise';
-import fs from 'fs-extra';
 
 enum UploadType {
   TURTLE_PROJECT_SOURCES = 'turtle-project-sources',
   SUBMISSION_APP_ARCHIVE = 'submission-app-archive',
 }
 
-async function uploadAsync(uploadType: UploadType, filePath: string): Promise<string> {
-  const presignedPost = await generateS3PresignedPostAsync(uploadType, filePath);
-  return await S3.uploadWithPresignedURL(presignedPost, fs.createReadStream(filePath));
+interface S3PresignedPost {
+  url: string;
+  fields: Record<string, string>;
 }
 
-async function generateS3PresignedPostAsync(
+async function uploadAsync(uploadType: UploadType, filePath: string): Promise<string> {
+  // return 'https://submission-service-archives.s3.amazonaws.com/staging/077dced2-ca21-48cd-9297-77ed8b16be7d/c1dee056928f5f7eff0becaefd36f208';
+  const presignedPost = await obtainS3PresignedPostAsync(uploadType, filePath);
+  return await uploadWithPresignedPostAsync(fs.createReadStream(filePath), presignedPost);
+}
+
+async function obtainS3PresignedPostAsync(
   uploadType: UploadType,
   filePath: string
-): Promise<S3.PresignedPost> {
+): Promise<S3PresignedPost> {
   const fileHash = await md5File(filePath);
   const api = await getApiClientForUser();
   const { presignedUrl } = await api.postAsync('upload-sessions', {
@@ -24,6 +33,26 @@ async function generateS3PresignedPostAsync(
     checksum: fileHash,
   });
   return presignedUrl;
+}
+
+async function uploadWithPresignedPostAsync(src: Readable, presignedPost: S3PresignedPost) {
+  const form = new FormData();
+  for (const [fieldKey, fieldValue] of Object.entries(presignedPost.fields)) {
+    form.append(fieldKey, fieldValue);
+  }
+  form.append('file', src);
+  const formBuffer = await convertFormDataToBuffer(form);
+  const result = await axios.post(presignedPost.url, formBuffer, {
+    headers: form.getHeaders(),
+    maxContentLength: formBuffer.byteLength,
+  });
+  return String(result.headers.location);
+}
+
+async function convertFormDataToBuffer(formData: FormData): Promise<Buffer> {
+  return new Promise(resolve => {
+    formData.pipe(concat({ encoding: 'buffer' }, data => resolve(data)));
+  });
 }
 
 async function getApiClientForUser(): Promise<ApiV2> {

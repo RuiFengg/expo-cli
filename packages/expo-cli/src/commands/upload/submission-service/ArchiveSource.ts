@@ -1,7 +1,9 @@
 import { StandaloneBuild } from '@expo/xdl';
 import { Platform } from '@expo/config';
+import ora from 'ora';
 
 import { UploadType, uploadAsync } from '../../../uploads';
+import { existingFile } from '../../../validators';
 
 enum ArchiveSourceType {
   url,
@@ -62,8 +64,18 @@ async function getArchiveUrlAsync(source: ArchiveSource) {
     }
     return builds[0].artifacts.url;
   } else if (source.sourceType === ArchiveSourceType.path) {
-    // TODO: check if the file exists
-    return await uploadAsync(UploadType.SUBMISSION_APP_ARCHIVE, source.path);
+    if (!(await existingFile(source.path))) {
+      throw new Error(`${source.path} doesn't exist`);
+    }
+    const spinner = ora(`Uploading ${source.path}`).start();
+    try {
+      const archiveUrl = await uploadAsync(UploadType.SUBMISSION_APP_ARCHIVE, source.path);
+      spinner.succeed();
+      return archiveUrl;
+    } catch (err) {
+      spinner.fail();
+      throw err;
+    }
   } else if (source.sourceType === ArchiveSourceType.buildId) {
     const build = await StandaloneBuild.getStandaloneBuildById({
       platform: source.platform,

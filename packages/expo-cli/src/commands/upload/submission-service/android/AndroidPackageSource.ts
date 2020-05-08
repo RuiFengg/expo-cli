@@ -32,7 +32,7 @@ async function getAndroidPackageAsync(source: AndroidPackageSource) {
     });
     return androidPackage;
   } else {
-    throw new Error('Not implemented yet');
+    throw new Error('This should never happen');
   }
 }
 
